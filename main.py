@@ -48,15 +48,26 @@ async def cmds(ctx: commands.Context):
         color=0x5865F2,
         description="Prefijo: `?` (no distingue mayúsculas/minúsculas)"
     )
-    embed.add_field(name="?lock [#canal] [tiempo]", value="Bloquea un canal (opcionalmente temporal)", inline=False)
-    embed.add_field(name="?unlock [#canal]", value="Desbloquea un canal", inline=False)
-    embed.add_field(name="?warn @usuario [motivo]", value="Advierte a un usuario", inline=False)
-    embed.add_field(name="?warns @usuario", value="Muestra las advertencias de un usuario", inline=False)
-    embed.add_field(name="?delwarn @usuario <id>", value="Elimina una advertencia específica", inline=False)
-    embed.add_field(name="?ban @usuario/ID [motivo]", value="Banea permanentemente", inline=False)
-    embed.add_field(name="?unban <user_id> [motivo]", value="Desbanea por ID", inline=False)
-    embed.add_field(name="?tempban @usuario/ID <tiempo> [motivo]", value="Baneo temporal", inline=False)
-    embed.add_field(name="/welcome-setup", value="Panel interactivo de configuración de bienvenida", inline=False)
+    embed.add_field(
+        name="Moderación",
+        value=(
+            "`?lock` `?unlock` `?warn` `?warns` `?delwarn`\n"
+            "`?ban` `?unban` `?tempban` `?kick`\n"
+            "`?mute` `?unmute` `?clear` `?slowmode` `?nick`\n"
+            "`?addrole` `?remove-role` `?setlogs`"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="Utilidad",
+        value="`?snipe` `?user-info` `?server-info` `?cmds`",
+        inline=False
+    )
+    embed.add_field(
+        name="Bienvenida",
+        value="`/welcome-setup`",
+        inline=False
+    )
     embed.set_footer(text="Bot de moderación global")
     await ctx.send(embed=embed)
 
