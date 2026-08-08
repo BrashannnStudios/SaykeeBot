@@ -46,7 +46,13 @@ async def init_db():
                 enabled INTEGER DEFAULT 1
             )
         """)
-        # Migración segura por si la tabla ya existía
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS mod_config (
+                guild_id INTEGER PRIMARY KEY,
+                log_channel_id INTEGER
+            )
+        """)
+        # Migraciones seguras
         try:
             await db.execute("ALTER TABLE welcome_config ADD COLUMN recommended_channels TEXT")
         except Exception:
@@ -168,3 +174,20 @@ async def set_welcome_config(guild_id: int, **kwargs):
                 values
             )
         await db.commit()
+
+# ── Logs de moderación ──
+async def set_log_channel(guild_id: int, channel_id: Optional[int]):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO mod_config (guild_id, log_channel_id) VALUES (?, ?)",
+            (guild_id, channel_id)
+        )
+        await db.commit()
+
+async def get_log_channel(guild_id: int) -> Optional[int]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT log_channel_id FROM mod_config WHERE guild_id = ?", (guild_id,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row and row[0] else None
