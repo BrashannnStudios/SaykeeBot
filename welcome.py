@@ -1,12 +1,11 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, ui
-from typing import Optional, List
+from typing import Optional
 
 from database import get_welcome_config, set_welcome_config
 
 def apply_placeholders(text: str, member: discord.Member, guild: discord.Guild) -> str:
-    """Reemplaza todos los placeholders disponibles."""
     if not text:
         return text
     return (
@@ -19,7 +18,6 @@ def apply_placeholders(text: str, member: discord.Member, guild: discord.Guild) 
     )
 
 def build_panel_embed(config: dict, guild: discord.Guild) -> discord.Embed:
-    """Construye el embed del panel de configuración (se actualiza en vivo)."""
     embed = discord.Embed(
         title="Panel de Configuración de Bienvenida",
         description=(
@@ -42,7 +40,6 @@ def build_panel_embed(config: dict, guild: discord.Guild) -> discord.Embed:
         inline=True
     )
 
-    # Canales recomendados
     rec_ids = config.get("recommended_channels") or ""
     if rec_ids:
         mentions = " ".join(f"<#{cid.strip()}>" for cid in rec_ids.split(",") if cid.strip().isdigit())
@@ -76,9 +73,12 @@ class WelcomeMessageModal(ui.Modal, title="Configurar mensaje de bienvenida"):
         self.view_ref = view
 
     async def on_submit(self, interaction: discord.Interaction):
+        # PRIMERA respuesta obligatoria
+        await interaction.response.defer(ephemeral=True)
+
         await set_welcome_config(self.view_ref.guild_id, message=self.message.value)
-        await self.view_ref.refresh_panel(interaction)
-        await interaction.followup.send("Mensaje actualizado.", ephemeral=True)
+        await self.view_ref.refresh_panel()
+        await interaction.followup.send("Mensaje actualizado correctamente.", ephemeral=True)
 
 class WelcomeColorModal(ui.Modal, title="Color del embed"):
     color = ui.TextInput(
@@ -93,14 +93,16 @@ class WelcomeColorModal(ui.Modal, title="Color del embed"):
         self.view_ref = view
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
         value = self.color.value.lstrip("#")
         try:
             color_int = int(value, 16)
             await set_welcome_config(self.view_ref.guild_id, color=color_int)
-            await self.view_ref.refresh_panel(interaction)
+            await self.view_ref.refresh_panel()
             await interaction.followup.send(f"Color actualizado a `#{value.upper()}`.", ephemeral=True)
         except ValueError:
-            await interaction.response.send_message("Color inválido. Usa formato #RRGGBB.", ephemeral=True)
+            await interaction.followup.send("Color inválido. Usa formato `#RRGGBB` (ejemplo: `#ffffff`).", ephemeral=True)
 
 class WelcomeImageModal(ui.Modal, title="Imagen del embed"):
     url = ui.TextInput(
@@ -115,8 +117,10 @@ class WelcomeImageModal(ui.Modal, title="Imagen del embed"):
         self.view_ref = view
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
         await set_welcome_config(self.view_ref.guild_id, image_url=self.url.value or None)
-        await self.view_ref.refresh_panel(interaction)
+        await self.view_ref.refresh_panel()
         await interaction.followup.send("Imagen actualizada.", ephemeral=True)
 
 class WelcomeFooterModal(ui.Modal, title="Footer del embed"):
@@ -132,8 +136,10 @@ class WelcomeFooterModal(ui.Modal, title="Footer del embed"):
         self.view_ref = view
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
         await set_welcome_config(self.view_ref.guild_id, footer=self.footer.value or None)
-        await self.view_ref.refresh_panel(interaction)
+        await self.view_ref.refresh_panel()
         await interaction.followup.send("Footer actualizado.", ephemeral=True)
 
 class WelcomeSetupView(ui.View):
@@ -143,16 +149,19 @@ class WelcomeSetupView(ui.View):
         self.guild_id = guild_id
         self.message: Optional[discord.Message] = None
 
-    async def refresh_panel(self, interaction: discord.Interaction):
+    async def refresh_panel(self):
         """Actualiza el embed del panel en tiempo real."""
-        config = await get_welcome_config(self.guild_id) or {}
-        embed = build_panel_embed(config, interaction.guild)
+        if not self.message:
+            return
 
+        config = await get_welcome_config(self.guild_id) or {}
+        guild = self.bot.get_guild(self.guild_id)
+        if not guild:
+            return
+
+        embed = build_panel_embed(config, guild)
         try:
-            if interaction.message:
-                await interaction.message.edit(embed=embed, view=self)
-            elif self.message:
-                await self.message.edit(embed=embed, view=self)
+            await self.message.edit(embed=embed, view=self)
         except Exception:
             pass
 
@@ -166,13 +175,13 @@ class WelcomeSetupView(ui.View):
         row=0
     )
     async def select_welcome_channel(self, interaction: discord.Interaction, select: ui.ChannelSelect):
+        await interaction.response.defer(ephemeral=True)
         channel = select.values[0]
         await set_welcome_config(self.guild_id, channel_id=channel.id)
-        await interaction.response.defer()
-        await self.refresh_panel(interaction)
-        await interaction.followup.send(f"Canal de bienvenida: {channel.mention}", ephemeral=True)
+        await self.refresh_panel()
+        await interaction.followup.send(f"Canal de bienvenida establecido: {channel.mention}", ephemeral=True)
 
-    # ── Canales recomendados (múltiples) ──
+    # ── Canales recomendados ──
     @ui.select(
         cls=ui.ChannelSelect,
         channel_types=[discord.ChannelType.text],
@@ -182,11 +191,11 @@ class WelcomeSetupView(ui.View):
         row=1
     )
     async def select_recommended(self, interaction: discord.Interaction, select: ui.ChannelSelect):
+        await interaction.response.defer(ephemeral=True)
         channels = select.values
         ids = ",".join(str(c.id) for c in channels) if channels else None
         await set_welcome_config(self.guild_id, recommended_channels=ids)
-        await interaction.response.defer()
-        await self.refresh_panel(interaction)
+        await self.refresh_panel()
 
         if channels:
             mentions = " ".join(c.mention for c in channels)
@@ -194,7 +203,7 @@ class WelcomeSetupView(ui.View):
         else:
             await interaction.followup.send("Canales recomendados eliminados.", ephemeral=True)
 
-    # ── Botones de configuración ──
+    # ── Botones ──
     @ui.button(label="Mensaje", style=discord.ButtonStyle.primary, emoji="💬", row=2)
     async def btn_message(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(WelcomeMessageModal(self))
@@ -213,7 +222,6 @@ class WelcomeSetupView(ui.View):
 
     @ui.button(label="Preview", style=discord.ButtonStyle.success, emoji="👁️", row=3)
     async def btn_preview(self, interaction: discord.Interaction, button: ui.Button):
-        """Muestra una vista previa real del mensaje de bienvenida."""
         config = await get_welcome_config(self.guild_id) or {}
         member = interaction.user
         guild = interaction.guild
@@ -234,7 +242,6 @@ class WelcomeSetupView(ui.View):
             embed.set_footer(text=footer)
         embed.set_thumbnail(url=member.display_avatar.url)
 
-        # Canales recomendados en el preview
         rec_ids = config.get("recommended_channels") or ""
         if rec_ids:
             mentions = " ".join(f"<#{cid.strip()}>" for cid in rec_ids.split(",") if cid.strip().isdigit())
@@ -249,11 +256,11 @@ class WelcomeSetupView(ui.View):
 
     @ui.button(label="Activar / Desactivar", style=discord.ButtonStyle.danger, emoji="⚡", row=3)
     async def btn_toggle(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer(ephemeral=True)
         config = await get_welcome_config(self.guild_id) or {}
         new_state = 0 if config.get("enabled", 1) else 1
         await set_welcome_config(self.guild_id, enabled=new_state)
-        await interaction.response.defer()
-        await self.refresh_panel(interaction)
+        await self.refresh_panel()
         state = "activado" if new_state else "desactivado"
         await interaction.followup.send(f"Sistema de bienvenida **{state}**.", ephemeral=True)
 
@@ -270,7 +277,7 @@ class Welcome(commands.Cog):
         view = WelcomeSetupView(self.bot, interaction.guild_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-        # Guardamos la referencia del mensaje para poder editarlo después
+        # Guardamos la referencia para poder editar el panel después
         view.message = await interaction.original_response()
 
     @commands.Cog.listener()
@@ -299,7 +306,6 @@ class Welcome(commands.Cog):
             embed.set_footer(text=footer)
         embed.set_thumbnail(url=member.display_avatar.url)
 
-        # Canales recomendados
         rec_ids = config.get("recommended_channels") or ""
         if rec_ids:
             mentions = " ".join(f"<#{cid.strip()}>" for cid in rec_ids.split(",") if cid.strip().isdigit())
