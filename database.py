@@ -42,9 +42,15 @@ async def init_db():
                 color INTEGER DEFAULT 5814783,
                 image_url TEXT,
                 footer TEXT DEFAULT 'Sistema de Bienvenida',
+                recommended_channels TEXT,
                 enabled INTEGER DEFAULT 1
             )
         """)
+        # Migración segura por si la tabla ya existía
+        try:
+            await db.execute("ALTER TABLE welcome_config ADD COLUMN recommended_channels TEXT")
+        except Exception:
+            pass
         await db.commit()
 
 async def add_warn(guild_id: int, user_id: int, moderator_id: int, reason: str) -> int:
@@ -144,7 +150,10 @@ async def set_welcome_config(guild_id: int, **kwargs):
                 "INSERT INTO welcome_config (guild_id) VALUES (?)", (guild_id,)
             )
 
-        allowed = {"channel_id", "message", "color", "image_url", "footer", "enabled"}
+        allowed = {
+            "channel_id", "message", "color", "image_url",
+            "footer", "recommended_channels", "enabled"
+        }
         fields = []
         values = []
         for key, value in kwargs.items():
